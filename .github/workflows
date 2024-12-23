@@ -1,0 +1,50 @@
+.github/
+  workflows/
+    roll.yml
+name: Rolling Bot
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  roll:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - name: Run dice roll script
+        run: |
+          #!/bin/bash
+          COMMENT_BODY="${{ github.event.comment.body }}"
+
+          # Check if the comment is a roll request
+          if [[ "$COMMENT_BODY" == *"!roll"* ]]; then
+            # Extract the dice from the comment (e.g., !roll 2d6)
+            DICE_REGEX="([0-9]+d[0-9]+)"
+            if [[ "$COMMENT_BODY" =~ $DICE_REGEX ]]; then
+              DICE="${BASH_REMATCH[1]}"
+              echo "Rolling: $DICE"
+              
+              # Roll the dice (basic support for format like 2d6, 1d20)
+              ROLLS=(${DICE//d/ })
+              NUM_ROLLS=${ROLLS[0]}
+              SIDES=${ROLLS[1]}
+              
+              RESULT=()
+              for (( i = 0; i < NUM_ROLLS; i++ )); do
+                RESULT+=($((RANDOM % SIDES + 1)))
+              done
+              echo "Results: ${RESULT[@]}"
+
+              # Comment back with the result
+              curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -X POST \
+                -d '{"body": "Rolled '"${RESULT[@]}"' for '"$DICE"'"}' \
+                "https://api.github.com/repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/replies"
+            else
+              echo "Invalid dice format. Use format like !roll 2d6."
+            fi
+          fi
